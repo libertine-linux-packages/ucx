@@ -1,0 +1,143 @@
+# This file is part of libertine linux's package ucx. It is subject to the license terms in the COPYRIGHT file found in the top-level directory of this distribution and at https://raw.githubusercontent.com/libertine-linux-packages/ucx/master/COPYRIGHT. No part of libertine linux's package ucx, including this file, may be copied, modified, propagated, or distributed except according to the terms contained in the COPYRIGHT file.
+# Copyright © 2016 The developers of libertine linux's package ucx. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/libertine-linux-packages/ucx/master/COPYRIGHT.
+
+
+
+case "$package" in
+	
+	ucx)
+		variant=upstream
+
+		depends build_ccache
+		build_needs ccache
+
+		depends build_gnumake
+		build_needs make
+
+		depends build_slibtool
+		build_needs clibtool-static libtoolize realpath
+
+		depends build_perl
+		build_needs perl
+
+		depends build_autoconf
+		build_needs autoconf autoheader autom4te autoreconf autoscan autoupdate ifnames
+
+		depends build_automake
+		build_needs automake aclocal
+
+		depends build_gnum4
+		build_needs m4
+
+		depends build_musl_cross_make_host
+		build_needs "$libertine_host"-cc "$libertine_host"-gcc "$libertine_host"-ar "$libertine_host"-ld "$libertine_host"-ranlib "$libertine_host"-strip
+
+		depends build_busybox
+		build_needs sort dirname install expr ls sleep
+		
+		depends libnuma
+		
+		depends ofed_mellanox
+
+		build_needs sed rm sh ln
+		libertine_compile_ucx()
+		{
+			pushd "$(libertine_public_sourcePath)"
+				
+				# Depends on libiberbs, ideally the Mellanox accelerated version
+				
+				libertine_public_populateInputSysroot libnuma ofed_mellanox
+				
+				local extraIbVerbsLibs=''
+				
+				if [ -f "$(libertine_public_inputSysrootPath)"/usr/lib/libmlx5.a ]; then
+					local buildMellanox5=true
+					extraIbVerbsLibs="$extraIbVerbsLibs -lmlx5"
+				else
+					local buildMellanox5=false
+				fi
+				
+				if [ -f "$(libertine_public_inputSysrootPath)"/usr/lib/librxe.a ]; then
+					local buildSoftRoCE=true
+					extraIbVerbsLibs="$extraIbVerbsLibs -lrxe"
+				else
+					local buildSoftRoCE=false
+				fi
+								
+				# Musl fixes
+				sed -i -e 's;CFLAGS="-g -Wall -Werror $UCX_CFLAGS";-Werror=implicit-function-declaration $UCX_CFLAGS;g' config/m4/compiler.m4
+				sed -i -e '/ malloc_trim/d' src/ucm/malloc/malloc_hook.c
+				sed -i -e 's/PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP/{{PTHREAD_MUTEX_RECURSIVE}}/g' src/ucm/mmap/replace.c
+				cp -a -f -H ../overrides/. ./
+				
+				# libibverbs static linking fixes
+				sed -i -e 's;-libverbs;-Wl,--whole-archive -libibverbs'${extraIbVerbsLibs}' -Wl,--no-whole-archive;g' config/m4/ib.m4
+				
+				libtoolize --install --force --verbose
+				autoreconf --install --force --verbose
+		
+				CFLAGS='-D_GNU_SOURCE' libertine_public_autoconf_modernAutoconfConfigure \
+				 	--enable-fast-install --disable-silent-rules --disable-dependency-tracking \
+					--disable-shared --enable-static
+					--disable-openmp \
+					--enable-numa \
+					--enable-tuning \
+					--enable-mt \
+					--with-verbs="$(libertine_public_inputSysrootPath)"/usr \
+					--with-rc \
+					--with-ud \
+					--with-cm \
+					--with-dc \
+					--with-ib-hw-tm \
+					--enable-optimizations \
+					--disable-backtrace-detail \
+					--disable-assertions \
+					--disable-symbol-override \
+					--disable-frame-pointer \
+					--disable-fault-injection \
+					--disable-params-check \
+					--disable-debug-data \
+					--disable-doxygen-doc \
+					--with-avx \
+					--with-sse41 \
+					--with-sse42 \
+					--with-allocator=ptmalloc286 \
+					--with-knem=no \
+					--with-xpmem=no
+				
+				libertine_public_make
+		
+				libertine_public_make DESTDIR="$(libertine_public_outputHostSysrootPath)" install
+		
+			popd
+		}
+	;;
+	
+	ucx_tools)
+	
+		variant=empty
+		
+		depends ucx
+	
+		depends build_musl_cross_make_host
+		build_needs "$libertine_host"-strip
+
+		depends build_paxctl
+		build_needs paxctl
+
+		build_needs mkdir cp
+		libertine_compile_ucx_tools()
+		{
+			local destinationFolderPath="$(libertine_public_outputInitramfsPath)"/usr/bin
+			mkdir -m 0755 -p "$destinationFolderPath"
+			
+			local binary
+			for binary in ucxxxxx
+			do
+				cp "$(libertine_public_outputHostSysrootPath ucx)"/usr/bin/"$binary" "$destinationFolderPath"
+				libertine_public_stripAndSecureBinary "$destinationFolderPath"/"$binary"
+			done
+		}
+	;;
+	
+esac
