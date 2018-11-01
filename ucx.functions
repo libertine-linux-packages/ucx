@@ -33,6 +33,7 @@ case "$package" in
 		build_needs "$libertine_host"-cc "$libertine_host"-gcc "$libertine_host"-ar "$libertine_host"-ld "$libertine_host"-ranlib "$libertine_host"-strip
 
 		depends build_busybox
+		depends build_netbsd_src_sleep
 		build_needs sort dirname install expr ls sleep
 		
 		depends libnuma
