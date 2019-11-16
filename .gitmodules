@@ -2,4 +2,3 @@
 	path = upstream
 	url = https://github.com/libertine-linux-clones/ucx.git
 	branch = master
-	libertine-linux-upstream = https://github.com/openucx/ucx.git
